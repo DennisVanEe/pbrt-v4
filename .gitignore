@@ -5,3 +5,8 @@ src/build
 .DS_Store
 .ipynb_checkpoints/
 build/
+
+# Specific to Visual Studio for windows:
+.vs/
+out/
+CMakeSettings.json
