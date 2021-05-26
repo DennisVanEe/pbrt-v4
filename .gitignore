@@ -9,4 +9,5 @@ build/
 # Specific to Visual Studio for windows:
 .vs/
 out/
+.vscode/
 CMakeSettings.json
