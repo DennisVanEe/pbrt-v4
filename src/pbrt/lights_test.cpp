@@ -24,7 +24,7 @@ TEST(SpotLight, Power) {
     static ConstantSpectrum I(10.);
     Transform id;
     SpotLight light(id, MediumInterface(), &I, 1.f /* scale */, 60 /* total width */,
-                    40 /* falloff start */, Allocator());
+                    40 /* falloff start */, 0, Allocator());
 
     SampledWavelengths lambda = SampledWavelengths::SampleUniform(0.5);
     SampledSpectrum phi = light.Phi(lambda);
@@ -49,7 +49,7 @@ TEST(SpotLight, Sampling) {
     Transform id;
     for (auto ws : widthStart) {
         SpotLight light(id, MediumInterface(), &I, 1.f /* scale */,
-                        ws[0] /* total width */, ws[1] /* falloff start */,
+                        ws[0] /* total width */, ws[1] /* falloff start */, 0,
                         Allocator());
 
         RNG rng;
@@ -89,7 +89,8 @@ TEST(GoniometricLight, Power) {
     SampledWavelengths lambda = SampledWavelengths::SampleUniform(0.5);
     static ConstantSpectrum I(10.);
     Transform id;
-    GoniometricLight light(id, MediumInterface(), &I, 1.f, std::move(image), Allocator());
+    GoniometricLight light(id, MediumInterface(), &I, 1.f, std::move(image), 0,
+                           Allocator());
 
     SampledSpectrum phi = light.Phi(lambda);
 
@@ -131,7 +132,8 @@ TEST(GoniometricLight, Sampling) {
 
     static ConstantSpectrum I(10.);
     static Transform id;
-    GoniometricLight light(id, MediumInterface(), &I, 1.f, std::move(image), Allocator());
+    GoniometricLight light(id, MediumInterface(), &I, 1.f, std::move(image), 0,
+                           Allocator());
     SampledWavelengths lambda = SampledWavelengths::SampleUniform(0.5);
     testPhiVsSampled(Light(&light), lambda);
 }
@@ -142,7 +144,7 @@ TEST(ProjectionLight, Power) {
         Image image = MakeLightImage(res);
 
         ProjectionLight light(Transform(), MediumInterface(), std::move(image),
-                              RGBColorSpace::sRGB, 10 /* scale */, 30 /* fov */,
+                              RGBColorSpace::sRGB, 10 /* scale */, 30 /* fov */, 0,
                               Allocator());
 
         SampledSpectrum phi = light.Phi(lambda);
@@ -166,7 +168,7 @@ TEST(ProjectionLight, Sampling) {
 
         SampledWavelengths lambda = SampledWavelengths::SampleUniform(0.5);
         ProjectionLight light(Transform(), MediumInterface(), std::move(image),
-                              RGBColorSpace::sRGB, 10 /* scale */, 30 /* fov */,
+                              RGBColorSpace::sRGB, 10 /* scale */, 30 /* fov */, 0,
                               Allocator());
 
         testPhiVsSampled(Light(&light), lambda);

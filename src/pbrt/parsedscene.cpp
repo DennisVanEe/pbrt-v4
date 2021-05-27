@@ -1080,9 +1080,9 @@ std::vector<Light> ParsedScene::CreateLights(
         if (light.renderFromObject.IsAnimated())
             Warning(&light.loc,
                     "Animated lights aren't supported. Using the start transform.");
-        Light l = Light::Create(light.name, light.parameters,
-                                light.renderFromObject.startTransform,
-                                camera.cameraTransform, outsideMedium, &light.loc, alloc);
+        Light l = Light::Create(
+            light.name, light.parameters, light.renderFromObject.startTransform,
+            camera.cameraTransform, outsideMedium, &light.loc, lights.size(), alloc);
 
         lights.push_back(l);
     }
@@ -1127,7 +1127,7 @@ std::vector<Light> ParsedScene::CreateLights(
         for (pbrt::Shape ps : shapeObjects) {
             Light area = Light::CreateArea(
                 areaLightEntity.name, areaLightEntity.parameters, *sh.renderFromObject,
-                mi, ps, alphaTex, &areaLightEntity.loc, alloc);
+                mi, ps, alphaTex, &areaLightEntity.loc, lights.size(), alloc);
             if (area) {
                 lights.push_back(area);
                 shapeLights->push_back(area);

@@ -134,9 +134,10 @@ WavefrontPathIntegrator::WavefrontPathIntegrator(Allocator alloc, ParsedScene &s
             Warning(&light.loc,
                     "Animated lights aren't supported. Using the start transform.");
 
-        Light l = Light::Create(
-            light.name, light.parameters, light.renderFromObject.startTransform,
-            scene.camera.cameraTransform, outsideMedium, &light.loc, alloc);
+        Light l = Light::Create(light.name, light.parameters,
+                                light.renderFromObject.startTransform,
+                                scene.camera.cameraTransform, outsideMedium, &light.loc,
+                                allLights.size(), alloc);
 
         if (l.Is<UniformInfiniteLight>() || l.Is<ImageInfiniteLight>() ||
             l.Is<PortalImageInfiniteLight>())
@@ -207,7 +208,7 @@ WavefrontPathIntegrator::WavefrontPathIntegrator(Allocator alloc, ParsedScene &s
             DiffuseAreaLight *area = DiffuseAreaLight::Create(
                 renderFromLight.startTransform, outsideMedium, areaLightEntity.parameters,
                 areaLightEntity.parameters.ColorSpace(), &areaLightEntity.loc, alloc, sh,
-                alphaTex);
+                alphaTex, allLights.size());
             allLights.push_back(area);
             lightsForShape->push_back(area);
         }
@@ -259,7 +260,9 @@ WavefrontPathIntegrator::WavefrontPathIntegrator(Allocator alloc, ParsedScene &s
 
     // If we are using a grid:
     if (lightSamplerName == "grid") {
-        alloc.allocate<GridLight>();  // todo
+        lightGrid =
+            alloc.new_object<LightGrid>(allLights.size(), aggregate->Bounds(), 128,
+                                        alloc);  // todo
     }
 
     if (scene.integrator.name != "path" && scene.integrator.name != "volpath")

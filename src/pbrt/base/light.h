@@ -53,16 +53,19 @@ class Light : public TaggedPointer<  // Light Source Types
     static Light Create(const std::string &name, const ParameterDictionary &parameters,
                         const Transform &renderFromLight,
                         const CameraTransform &cameraTransform, Medium outsideMedium,
-                        const FileLoc *loc, Allocator alloc);
+                        const FileLoc *loc, int lightId, Allocator alloc);
     static Light CreateArea(const std::string &name,
                             const ParameterDictionary &parameters,
                             const Transform &renderFromLight,
                             const MediumInterface &mediumInterface, const Shape shape,
-                            FloatTexture alpha, const FileLoc *loc, Allocator alloc);
+                            FloatTexture alpha, const FileLoc *loc, int lightId,
+                            Allocator alloc);
 
     SampledSpectrum Phi(SampledWavelengths lambda) const;
 
     PBRT_CPU_GPU inline LightType Type() const;
+
+    PBRT_CPU_GPU inline int LightID() const;
 
     PBRT_CPU_GPU inline pstd::optional<LightLiSample> SampleLi(
         LightSampleContext ctx, Point2f u, SampledWavelengths lambda,

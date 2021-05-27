@@ -92,7 +92,8 @@ std::vector<TestScene> GetScenes() {
         ConstantSpectrum I(1);
         Float scale = Pi / SpectrumToPhotometric(&I);
         std::vector<Light> lights;
-        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale, Allocator()));
+        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale,
+                                        lights.size(), Allocator()));
 
         scenes.push_back({bvh, lights, "Sphere, 1 light, Kd = 0.5", 1.0});
     }
@@ -119,10 +120,14 @@ std::vector<TestScene> GetScenes() {
         ConstantSpectrum I(1);
         Float scale = Pi / (4 * SpectrumToPhotometric(&I));
         std::vector<Light> lights;
-        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale, Allocator()));
-        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale, Allocator()));
-        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale, Allocator()));
-        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale, Allocator()));
+        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale,
+                                        lights.size(), Allocator()));
+        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale,
+                                        lights.size(), Allocator()));
+        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale,
+                                        lights.size(), Allocator()));
+        lights.push_back(new PointLight(identity, MediumInterface(), &I, scale,
+                                        lights.size(), Allocator()));
 
         scenes.push_back({bvh, lights, "Sphere, 1 light, Kd = 0.5", 1.0});
     }
@@ -143,8 +148,8 @@ std::vector<TestScene> GetScenes() {
         ConstantSpectrum Le(1);
         Float scale = 0.5 / SpectrumToPhotometric(&Le);
         Light areaLight =
-            new DiffuseAreaLight(identity, MediumInterface(), &Le, scale, sphere, nullptr, Image(),
-                                 nullptr, false, Allocator());
+            new DiffuseAreaLight(identity, MediumInterface(), &Le, scale, sphere, nullptr,
+                                 Image(), nullptr, false, 0, Allocator());
 
         std::vector<Light> lights;
         lights.push_back(areaLight);

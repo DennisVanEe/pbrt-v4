@@ -140,10 +140,13 @@ class LightBase {
   public:
     // LightBase Public Methods
     LightBase(LightType type, const Transform &renderFromLight,
-              const MediumInterface &mediumInterface);
+              const MediumInterface &mediumInterface, int lightId);
 
     PBRT_CPU_GPU
     LightType Type() const { return type; }
+
+    PBRT_CPU_GPU
+    int LightID() const { return lightId; }
 
     PBRT_CPU_GPU
     SampledSpectrum L(Point3f p, Normal3f n, Point2f uv, Vector3f w,
@@ -159,6 +162,7 @@ class LightBase {
   protected:
     std::string BaseToString() const;
     // LightBase Protected Members
+    int lightId;  // Used to specify an index into the array of lights
     LightType type;
     Transform renderFromLight;
     MediumInterface mediumInterface;
@@ -169,14 +173,14 @@ class PointLight : public LightBase {
   public:
     // PointLight Public Methods
     PointLight(Transform renderFromLight, MediumInterface mediumInterface, Spectrum I,
-               Float scale, Allocator alloc)
-        : LightBase(LightType::DeltaPosition, renderFromLight, mediumInterface),
+               Float scale, int lightId, Allocator alloc)
+        : LightBase(LightType::DeltaPosition, renderFromLight, mediumInterface, lightId),
           I(I, alloc),
           scale(scale) {}
 
     static PointLight *Create(const Transform &renderFromLight, Medium medium,
                               const ParameterDictionary &parameters,
-                              const RGBColorSpace *colorSpace, const FileLoc *loc,
+                              const RGBColorSpace *colorSpace, const FileLoc *loc, int lightId,
                               Allocator alloc);
     SampledSpectrum Phi(SampledWavelengths lambda) const;
     void Preprocess(const Bounds3f &sceneBounds) {}
@@ -219,15 +223,15 @@ class PointLight : public LightBase {
 class DistantLight : public LightBase {
   public:
     // DistantLight Public Methods
-    DistantLight(const Transform &renderFromLight, Spectrum Lemit, Float scale,
+    DistantLight(const Transform &renderFromLight, Spectrum Lemit, Float scale, int lightId,
                  Allocator alloc)
-        : LightBase(LightType::DeltaDirection, renderFromLight, MediumInterface()),
+        : LightBase(LightType::DeltaDirection, renderFromLight, MediumInterface(), lightId),
           Lemit(Lemit, alloc),
           scale(scale) {}
 
     static DistantLight *Create(const Transform &renderFromLight,
                                 const ParameterDictionary &parameters,
-                                const RGBColorSpace *colorSpace, const FileLoc *loc,
+                                const RGBColorSpace *colorSpace, const FileLoc *loc, int lightId,
                                 Allocator alloc);
 
     SampledSpectrum Phi(SampledWavelengths lambda) const;
@@ -277,12 +281,12 @@ class ProjectionLight : public LightBase {
   public:
     // ProjectionLight Public Methods
     ProjectionLight(Transform renderFromLight, MediumInterface medium, Image image,
-                    const RGBColorSpace *colorSpace, Float scale, Float fov,
+                    const RGBColorSpace *colorSpace, Float scale, Float fov, int lightId,
                     Allocator alloc);
 
     static ProjectionLight *Create(const Transform &renderFromLight, Medium medium,
                                    const ParameterDictionary &parameters,
-                                   const FileLoc *loc, Allocator alloc);
+                                   const FileLoc *loc, int lightId, Allocator alloc);
 
     void Preprocess(const Bounds3f &sceneBounds) {}
 
@@ -331,12 +335,12 @@ class GoniometricLight : public LightBase {
     // GoniometricLight Public Methods
     GoniometricLight(const Transform &renderFromLight,
                      const MediumInterface &mediumInterface, Spectrum I, Float scale,
-                     Image image, Allocator alloc);
+                     Image image, int lightId, Allocator alloc);
 
     static GoniometricLight *Create(const Transform &renderFromLight, Medium medium,
                                     const ParameterDictionary &parameters,
                                     const RGBColorSpace *colorSpace, const FileLoc *loc,
-                                    Allocator alloc);
+                                    int lightId, Allocator alloc);
 
     void Preprocess(const Bounds3f &sceneBounds) {}
 
@@ -387,13 +391,13 @@ class DiffuseAreaLight : public LightBase {
                      const MediumInterface &mediumInterface, Spectrum Le, Float scale,
                      const Shape shape, FloatTexture alpha, Image image,
                      const RGBColorSpace *imageColorSpace, bool twoSided,
-                     Allocator alloc);
+                     int lightId, Allocator alloc);
 
     static DiffuseAreaLight *Create(const Transform &renderFromLight, Medium medium,
                                     const ParameterDictionary &parameters,
                                     const RGBColorSpace *colorSpace, const FileLoc *loc,
                                     Allocator alloc, const Shape shape,
-                                    FloatTexture alpha);
+                                    FloatTexture alpha, int lightId);
 
     void Preprocess(const Bounds3f &sceneBounds) {}
 
@@ -478,7 +482,7 @@ class UniformInfiniteLight : public LightBase {
   public:
     // UniformInfiniteLight Public Methods
     UniformInfiniteLight(const Transform &renderFromLight, Spectrum Lemit, Float scale,
-                         Allocator alloc);
+                         int lightId, Allocator alloc);
 
     void Preprocess(const Bounds3f &sceneBounds) {
         sceneBounds.BoundingSphere(&sceneCenter, &sceneRadius);
@@ -524,7 +528,7 @@ class ImageInfiniteLight : public LightBase {
     // ImageInfiniteLight Public Methods
     ImageInfiniteLight(Transform renderFromLight, Image image,
                        const RGBColorSpace *imageColorSpace, Float scale,
-                       std::string filename, Allocator alloc);
+                       std::string filename, int lightId, Allocator alloc);
 
     void Preprocess(const Bounds3f &sceneBounds) {
         sceneBounds.BoundingSphere(&sceneCenter, &sceneRadius);
@@ -612,7 +616,7 @@ class PortalImageInfiniteLight : public LightBase {
     PortalImageInfiniteLight(const Transform &renderFromLight, Image image,
                              const RGBColorSpace *imageColorSpace, Float scale,
                              const std::string &filename, std::vector<Point3f> portal,
-                             Allocator alloc);
+                             int lightId, Allocator alloc);
 
     void Preprocess(const Bounds3f &sceneBounds) {
         sceneBounds.BoundingSphere(&sceneCenter, &sceneRadius);
@@ -713,11 +717,11 @@ class SpotLight : public LightBase {
   public:
     // SpotLight Public Methods
     SpotLight(const Transform &renderFromLight, const MediumInterface &m, Spectrum I,
-              Float scale, Float totalWidth, Float falloffStart, Allocator alloc);
+              Float scale, Float totalWidth, Float falloffStart, int lightId, Allocator alloc);
 
     static SpotLight *Create(const Transform &renderFromLight, Medium medium,
                              const ParameterDictionary &parameters,
-                             const RGBColorSpace *colorSpace, const FileLoc *loc,
+                             const RGBColorSpace *colorSpace, const FileLoc *loc, int lightId,
                              Allocator alloc);
 
     void Preprocess(const Bounds3f &sceneBounds) {}
@@ -793,6 +797,11 @@ inline SampledSpectrum Light::Le(const Ray &ray, const SampledWavelengths &lambd
 
 inline LightType Light::Type() const {
     auto t = [&](auto ptr) { return ptr->Type(); };
+    return Dispatch(t);
+}
+
+inline int Light::LightID() const {
+    auto t = [&](auto ptr) { return ptr->LightID(); };
     return Dispatch(t);
 }
 
