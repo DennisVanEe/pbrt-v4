@@ -257,6 +257,11 @@ WavefrontPathIntegrator::WavefrontPathIntegrator(Allocator alloc, ParsedScene &s
         lightSamplerName = "uniform";
     lightSampler = LightSampler::Create(lightSamplerName, allLights, alloc);
 
+    // If we are using a grid:
+    if (lightSamplerName == "grid") {
+        alloc.allocate<GridLight>();  // todo
+    }
+
     if (scene.integrator.name != "path" && scene.integrator.name != "volpath")
         Warning(&scene.integrator.loc,
                 "Ignoring specified integrator \"%s\": the wavefront integrator "

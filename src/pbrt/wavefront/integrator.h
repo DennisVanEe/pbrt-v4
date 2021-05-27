@@ -141,6 +141,8 @@ class WavefrontPathIntegrator {
     pstd::vector<Light> *infiniteLights;
     LightSampler lightSampler;
 
+    LightGrid *lightGrid = nullptr;
+
     int maxDepth, samplesPerPixel;
     bool regularize;
 

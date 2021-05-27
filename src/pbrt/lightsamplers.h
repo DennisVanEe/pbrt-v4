@@ -27,6 +27,109 @@ struct LightHash {
     size_t operator()(Light light) const { return Hash(light.ptr()); }
 };
 
+// This is probably not the best place to put this thing (this will really impact the
+// properties of the scene, but whatever)
+// This stores the light grid.
+class LightGrid {
+  public:
+    LightGrid(int numLights, Point3f worldMin, Point3f worldMax, int resolution)
+        : numLights(numLights), worldMin(worldMin) {
+        worldDiagInv = (worldMax - worldMin);
+        worldDiagInv =
+            Vector3f(1 / worldDiagInv.x, 1 / worldDiagInv.y, 1 / worldDiagInv.z);
+    }
+
+    PBRT_CPU_GPU
+    void addOcclusionSample(int baseIndex, int lightId, bool hit) {
+        const int gridIdx = baseIndex * numLights + lightId;
+        grid[gridIdx].totalCnt += 1;
+        grid[gridIdx].hitCnt += static_cast<int>(hit);
+    }
+
+    PBRT_CPU_GPU
+    int sampleLight(int baseIndex, Float u) {
+        // This is probably not very effective, but we can try it and see what happens:
+        const int gridIdx = baseIndex * numLights;
+
+        // There is probably a better way, but let's do this for now and try to optimize
+        // it later:
+        Float totalCdf = 0;
+        for (int i = 0; i < numLights; ++i) {
+            totalCdf += grid[gridIdx + i].getProb();
+        }
+        const Float invTotalCdf = 1 / totalCdf;
+
+        Float currCdf = 0;
+        for (int i = 0; i < numLights; ++i) {
+            if (u >= currCdf) {
+                return i;
+            }
+            currCdf += grid[gridIdx + i].getProb() * invTotalCdf;
+        }
+        return 0;  // This shouldn't happen, but if it does, then we just go here
+    }
+
+    PBRT_CPU_GPU
+    int pdf(int baseIndex, int lightId) {
+        // This is probably not very effective, but we can try it and see what happens:
+        const int gridIdx = baseIndex * numLights;
+
+        // There is probably a better way, but let's do this for now and try to optimize
+        // it later:
+        Float totalCdf = 0;
+        for (int i = 0; i < numLights; ++i) {
+            totalCdf += grid[gridIdx + i].getProb();
+        }
+        const Float invTotalCdf = 1 / totalCdf;
+
+        return grid[gridIdx + lightId].getProb() * invTotalCdf;
+    }
+
+    PBRT_CPU_GPU
+    int CalcBaseGridIndex(Point3f org) const {
+        const Vector3f offset = org - worldMin;
+        const int xoffset =
+            std::min<int>(offset.x * worldDiagInv.x * resolution, resolution - 1);
+        const int yoffset =
+            std::min<int>(offset.y * worldDiagInv.y * resolution, resolution - 1);
+        const int zoffset =
+            std::min<int>(offset.z * worldDiagInv.z * resolution, resolution - 1);
+        return xoffset + resolution * (yoffset + resolution * zoffset);
+    }
+
+  private:
+    static constexpr int PROB_THRESHOLD = 12;  // Fine tune this
+
+    struct LightEntry {
+        uint16_t hitCnt;
+        uint16_t totalCnt;
+
+        PBRT_CPU_GPU
+        Float getProb() const {
+            if (totalCnt < PROB_THRESHOLD) {
+                return 1;
+            } else {
+                return hitCnt / static_cast<Float>(totalCnt);
+            }
+        }
+    };
+
+    // This stores 2 values, the number of hits, and the number of misses:
+    pstd::vector<LightEntry> grid;
+    Vector3f worldDiagInv;
+    Point3f worldMin;
+    int resolution;
+    int numLights;
+};
+
+// Grid based light sampler. The one problem is that we need to maintain a grid, and we
+// need to pass this grid around to the shadow handler so that it can update the grid when
+// necessary.
+class LightGridSampler {
+  public:
+  private:
+};
+
 // UniformLightSampler Definition
 class UniformLightSampler {
   public:
