@@ -45,10 +45,14 @@ class LightGrid {
 
     PBRT_CPU_GPU
     void AddOcclusionSample(Point3f org, int lightId, bool hit) {
-        // return;
         const int gridIdx = CalcBaseGridIndex(org) * numLights + lightId;
+#ifdef PBRT_GPU_CODE
+        atomicAdd(&grid[gridIdx].totalCnt, 1);
+        atomicAdd(&grid[gridIdx].hitCnt, static_cast<int>(hit));
+#else
         grid[gridIdx].totalCnt += 1;
         grid[gridIdx].hitCnt += static_cast<int>(hit);
+#endif
     }
 
     PBRT_CPU_GPU
@@ -63,6 +67,11 @@ class LightGrid {
         for (int i = 0; i < numLights; ++i) {
             totalCdf += grid[gridIdx + i].getProb();
         }
+
+        if (totalCdf < 0.001) {
+            return Sample(u, lights);
+        }
+
         const Float invTotalCdf = 1 / totalCdf;
 
         Float currCdf = 0;
@@ -76,7 +85,7 @@ class LightGrid {
         }
 
         // This shouldn't happen, but if it does, then we just go here
-        return pstd::optional<SampledLight>();
+        return Sample(u, lights);
     }
 
     PBRT_CPU_GPU
@@ -90,6 +99,11 @@ class LightGrid {
         for (int i = 0; i < numLights; ++i) {
             totalCdf += grid[gridIdx + i].getProb();
         }
+
+        if (totalCdf < 0.001) {
+            return PDF();
+        }
+
         const Float invTotalCdf = 1 / totalCdf;
 
         return grid[gridIdx + lightId].getProb() * invTotalCdf;
@@ -118,18 +132,18 @@ class LightGrid {
 
     // For these cases, we can't do anything better, so we won't really bother:
     PBRT_CPU_GPU
-    Float PDF(Light light) const {
+    Float PDF() const {
         if (numLights == 0)
             return 0;
         return 1.f / numLights;
     }
 
   private:
-    static constexpr uint16_t PROB_THRESHOLD = 12;  // Fine tune this
+    static constexpr int PROB_THRESHOLD = 12;  // Fine tune this
 
     struct LightEntry {
-        uint16_t hitCnt;
-        uint16_t totalCnt;
+        int hitCnt;
+        int totalCnt;
 
         LightEntry() : hitCnt(0), totalCnt(0) {}
 
@@ -172,20 +186,11 @@ class LightGridSampler {
 
     // For these cases, we can't do anything better, so we won't really bother:
     PBRT_CPU_GPU
-    pstd::optional<SampledLight> Sample(Float u) const {
-        if (lights.empty())
-            return {};
-        int lightIndex = std::min<int>(u * lights.size(), lights.size() - 1);
-        return SampledLight{lights[lightIndex], 1.f / lights.size()};
-    }
+    pstd::optional<SampledLight> Sample(Float u) const { return grid->Sample(u, lights); }
 
     // For these cases, we can't do anything better, so we won't really bother:
     PBRT_CPU_GPU
-    Float PDF(Light light) const {
-        if (lights.empty())
-            return 0;
-        return 1.f / lights.size();
-    }
+    Float PDF(Light light) const { grid->PDF(); }
 
     std::string ToString() const { return "LightGridSampler"; }
 
