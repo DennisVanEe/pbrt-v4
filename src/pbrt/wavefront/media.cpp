@@ -320,9 +320,9 @@ void WavefrontPathIntegrator::SampleMediumScattering(int wavefrontDepth) {
                     Ray ray(w.p, ls->pLight.p() - w.p, w.time, w.medium);
 
                     // Enqueue shadow ray
-                    shadowRayQueue->Push(ShadowRayWorkItem{ray, 1 - ShadowEpsilon,
-                                                           w.lambda, Ld, uniPathPDF,
-                                                           lightPathPDF, w.pixelIndex});
+                    shadowRayQueue->Push(ShadowRayWorkItem{
+                        ray, light.LightID(), 1 - ShadowEpsilon, w.lambda, Ld, uniPathPDF,
+                        lightPathPDF, w.pixelIndex});
 
                     PBRT_DBG("Enqueued medium shadow ray depth %d "
                              "Ld %f %f %f %f uniPathPDF %f %f %f %f "

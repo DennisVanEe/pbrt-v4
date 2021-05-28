@@ -179,6 +179,7 @@ using HitAreaLightQueue = WorkQueue<HitAreaLightWorkItem>;
 // ShadowRayWorkItem Definition
 struct ShadowRayWorkItem {
     Ray ray;
+    int lightId;
     Float tMax;
     SampledWavelengths lambda;
     SampledSpectrum Ld, uniPathPDF, lightPathPDF;

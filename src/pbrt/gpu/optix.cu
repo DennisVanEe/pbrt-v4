@@ -258,6 +258,11 @@ extern "C" __global__ void __raygen__shadow() {
     Trace(params.traversable, sr.ray, 1e-5f /* tMin */, sr.tMax, OPTIX_RAY_FLAG_NONE,
           missed);
 
+    //  If the ray missed, it means it hit the light, so we record it as such:
+    if (params.lightGrid) {
+        params.lightGrid->AddOcclusionSample(sr.ray.o, sr.lightId, missed);
+    }
+
     RecordShadowRayIntersection(sr, &params.pixelSampleState, !missed);
 }
 
@@ -275,21 +280,26 @@ extern "C" __global__ void __raygen__shadow_Tr() {
 
     ClosestHitContext ctx;
 
-    TraceTransmittance(sr, &params.pixelSampleState,
-                       [&](Ray ray, Float tMax) -> TransmittanceTraceResult {
-                           ctx = ClosestHitContext(ray.medium, true);
-                           uint32_t p0 = packPointer0(&ctx), p1 = packPointer1(&ctx);
+    bool hit;
+    TraceTransmittance(
+        sr, &params.pixelSampleState,
+        [&](Ray ray, Float tMax) -> TransmittanceTraceResult {
+            ctx = ClosestHitContext(ray.medium, true);
+            uint32_t p0 = packPointer0(&ctx), p1 = packPointer1(&ctx);
 
-                           uint32_t missed = 0;
+            uint32_t missed = 0;
 
-                           Trace(params.traversable, ray, 1e-5f /* tMin */, tMax, OPTIX_RAY_FLAG_NONE, p0,
-                                 p1, missed);
+            Trace(params.traversable, ray, 1e-5f /* tMin */, tMax, OPTIX_RAY_FLAG_NONE,
+                  p0, p1, missed);
 
-                           return TransmittanceTraceResult{!missed, Point3f(ctx.piHit), ctx.material};
-                       },
-                       [&](Point3f p) -> Ray {
-                           return ctx.SpawnRayTo(p);
-                       });
+            return TransmittanceTraceResult{!missed, Point3f(ctx.piHit), ctx.material};
+        },
+        [&](Point3f p) -> Ray { return ctx.SpawnRayTo(p); }, &hit);
+
+    // Again, if the ray hit something, it didn't hit the light, so we record it as such:
+    if (params.lightGrid) {
+        params.lightGrid->AddOcclusionSample(sr.ray.o, sr.lightId, !hit);
+    }
 }
 
 extern "C" __global__ void __miss__shadow_Tr() {

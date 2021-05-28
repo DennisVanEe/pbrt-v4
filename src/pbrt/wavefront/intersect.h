@@ -185,7 +185,7 @@ inline PBRT_CPU_GPU void rescale(SampledSpectrum &T_hat, SampledSpectrum &lightP
 template <typename T, typename S>
 inline PBRT_CPU_GPU void TraceTransmittance(ShadowRayWorkItem sr,
                                             SOA<PixelSampleState> *pixelSampleState,
-                                            T trace, S spawnTo) {
+                                            T trace, S spawnTo, bool *hit = nullptr) {
     SampledWavelengths lambda = sr.lambda;
 
     SampledSpectrum Ld = sr.Ld;
@@ -204,6 +204,10 @@ inline PBRT_CPU_GPU void TraceTransmittance(ShadowRayWorkItem sr,
             sr.pixelIndex, ray.o.x, ray.o.y, ray.o.z, ray.d.x, ray.d.y, ray.d.z, tMax);
 
         TransmittanceTraceResult result = trace(ray, tMax);
+
+        if (hit) {
+            *hit = result.hit;
+        }
 
         if (result.hit && result.material) {
             PBRT_DBG("Hit opaque. Bye\n");

@@ -8,13 +8,14 @@
 #include <pbrt/pbrt.h>
 
 #include <pbrt/base/light.h>
+#include <pbrt/base/lightsampler.h>
 #include <pbrt/base/material.h>
 #include <pbrt/base/medium.h>
 #include <pbrt/base/shape.h>
 #include <pbrt/base/texture.h>
+#include <pbrt/util/pstd.h>
 #include <pbrt/wavefront/workitems.h>
 #include <pbrt/wavefront/workqueue.h>
-#include <pbrt/util/pstd.h>
 
 #include <optix.h>
 
@@ -62,6 +63,7 @@ struct RayIntersectParameters {
     // shadow rays
     ShadowRayQueue *shadowRayQueue;
     SOA<PixelSampleState> pixelSampleState;
+    LightGrid *lightGrid;
 
     // Subsurface scattering...
     SubsurfaceScatterQueue *subsurfaceScatterQueue;

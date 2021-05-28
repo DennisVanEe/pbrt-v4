@@ -40,9 +40,11 @@ class OptiXAggregate : public WavefrontAggregate {
         MediumSampleQueue *mediumSampleQueue, RayQueue *nextRayQueue) const;
 
     void IntersectShadow(int maxRays, ShadowRayQueue *shadowRayQueue,
+                         LightGrid *lightGrid,
                          SOA<PixelSampleState> *pixelSampleState) const;
 
     void IntersectShadowTr(int maxRays, ShadowRayQueue *shadowRayQueue,
+                           LightGrid *lightGrid,
                            SOA<PixelSampleState> *pixelSampleState) const;
 
     void IntersectOneRandom(int maxRays, SubsurfaceScatterQueue *subsurfaceScatterQueue) const;

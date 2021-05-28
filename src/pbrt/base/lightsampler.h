@@ -24,16 +24,18 @@ class UniformLightSampler;
 class PowerLightSampler;
 class BVHLightSampler;
 class ExhaustiveLightSampler;
+class LightGridSampler;
 
 // LightSampler Definition
-class LightSampler : public TaggedPointer<UniformLightSampler, PowerLightSampler,
-                                          ExhaustiveLightSampler, BVHLightSampler> {
+class LightSampler
+    : public TaggedPointer<UniformLightSampler, PowerLightSampler, ExhaustiveLightSampler,
+                           BVHLightSampler, LightGridSampler> {
   public:
     // LightSampler Interface
     using TaggedPointer::TaggedPointer;
 
     static LightSampler Create(const std::string &name, pstd::span<const Light> lights,
-                               Allocator alloc);
+                               Allocator alloc, void *extraData = nullptr);
 
     std::string ToString() const;
 

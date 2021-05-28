@@ -252,11 +252,12 @@ WavefrontPathIntegrator::WavefrontPathIntegrator(Allocator alloc, ParsedScene &s
     if (!haveLights)
         ErrorExit("No light sources specified");
 
-    std::string lightSamplerName =
-        scene.integrator.parameters.GetOneString("lightsampler", "bvh");
+    std::string lightSamplerName = "bvh";  //"uniform";
+    // scene.integrator.parameters.GetOneString("lightsampler", "bvh");
     if (allLights.size() == 1)
         lightSamplerName = "uniform";
-    lightSampler = LightSampler::Create(lightSamplerName, allLights, alloc);
+
+    std::cout << "Light Sampler Chosen: " << lightSamplerName << "\n";
 
     // If we are using a grid:
     if (lightSamplerName == "grid") {
@@ -264,6 +265,8 @@ WavefrontPathIntegrator::WavefrontPathIntegrator(Allocator alloc, ParsedScene &s
             alloc.new_object<LightGrid>(allLights.size(), aggregate->Bounds(), 128,
                                         alloc);  // todo
     }
+
+    lightSampler = LightSampler::Create(lightSamplerName, allLights, alloc, lightGrid);
 
     if (scene.integrator.name != "path" && scene.integrator.name != "volpath")
         Warning(&scene.integrator.loc,
@@ -710,9 +713,11 @@ void WavefrontPathIntegrator::HandleEmissiveIntersection() {
 
 void WavefrontPathIntegrator::TraceShadowRays(int wavefrontDepth) {
     if (haveMedia)
-        aggregate->IntersectShadowTr(maxQueueSize, shadowRayQueue, &pixelSampleState);
+        aggregate->IntersectShadowTr(maxQueueSize, shadowRayQueue, lightGrid,
+                                     &pixelSampleState);
     else
-        aggregate->IntersectShadow(maxQueueSize, shadowRayQueue, &pixelSampleState);
+        aggregate->IntersectShadow(maxQueueSize, shadowRayQueue, lightGrid,
+                                   &pixelSampleState);
     // Reset shadow ray queue
     Do(
         "Reset shadowRayQueue", PBRT_CPU_GPU_LAMBDA() {

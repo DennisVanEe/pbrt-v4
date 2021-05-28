@@ -44,8 +44,9 @@ class LightGrid {
     }
 
     PBRT_CPU_GPU
-    void AddOcclusionSample(int baseIndex, int lightId, bool hit) {
-        const int gridIdx = baseIndex * numLights + lightId;
+    void AddOcclusionSample(Point3f org, int lightId, bool hit) {
+        // return;
+        const int gridIdx = CalcBaseGridIndex(org) * numLights + lightId;
         grid[gridIdx].totalCnt += 1;
         grid[gridIdx].hitCnt += static_cast<int>(hit);
     }
@@ -69,7 +70,7 @@ class LightGrid {
             const Float pdf = grid[gridIdx + i].getProb() * invTotalCdf;
             currCdf += pdf;
 
-            if (u >= currCdf) {
+            if (currCdf >= u) {
                 return SampledLight{lights[i], pdf};
             }
         }
@@ -106,8 +107,25 @@ class LightGrid {
         return xoffset + resolution * (yoffset + resolution * zoffset);
     }
 
+    // For these cases, we can't do anything better, so we won't really bother:
+    PBRT_CPU_GPU
+    pstd::optional<SampledLight> Sample(Float u, pstd::span<const Light> lights) const {
+        if (lights.empty())
+            return {};
+        int lightIndex = std::min<int>(u * lights.size(), lights.size() - 1);
+        return SampledLight{lights[lightIndex], 1.f / lights.size()};
+    }
+
+    // For these cases, we can't do anything better, so we won't really bother:
+    PBRT_CPU_GPU
+    Float PDF(Light light) const {
+        if (numLights == 0)
+            return 0;
+        return 1.f / numLights;
+    }
+
   private:
-    static constexpr int PROB_THRESHOLD = 12;  // Fine tune this
+    static constexpr uint16_t PROB_THRESHOLD = 12;  // Fine tune this
 
     struct LightEntry {
         uint16_t hitCnt;

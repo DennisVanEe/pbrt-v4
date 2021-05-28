@@ -44,8 +44,10 @@ class WavefrontAggregate {
                                   RayQueue *nextRayQ) const = 0;
 
     virtual void IntersectShadow(int maxRays, ShadowRayQueue *shadowRayQueue,
+                                 LightGrid *lightGrid,
                                  SOA<PixelSampleState> *pixelSampleState) const = 0;
     virtual void IntersectShadowTr(int maxRays, ShadowRayQueue *shadowRayQueue,
+                                   LightGrid *LightGrid,
                                    SOA<PixelSampleState> *pixelSampleState) const = 0;
 
     virtual void IntersectOneRandom(

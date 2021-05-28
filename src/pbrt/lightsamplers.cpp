@@ -45,7 +45,7 @@ std::string CompactLightBounds::ToString(const Bounds3f &allBounds) const {
 }
 
 LightSampler LightSampler::Create(const std::string &name, pstd::span<const Light> lights,
-                                  Allocator alloc) {
+                                  Allocator alloc, void *extraData) {
     if (name == "uniform")
         return alloc.new_object<UniformLightSampler>(lights, alloc);
     else if (name == "power")
@@ -54,7 +54,9 @@ LightSampler LightSampler::Create(const std::string &name, pstd::span<const Ligh
         return alloc.new_object<BVHLightSampler>(lights, alloc);
     else if (name == "exhaustive")
         return alloc.new_object<ExhaustiveLightSampler>(lights, alloc);
-    else {
+    else if (name == "grid") {
+        return alloc.new_object<LightGridSampler>(lights, alloc, extraData);
+    } else {
         Error(R"(Light sample distribution type "%s" unknown. Using "bvh".)",
               name.c_str());
         return alloc.new_object<BVHLightSampler>(lights, alloc);

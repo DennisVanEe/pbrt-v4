@@ -54,6 +54,7 @@ void CPUAggregate::IntersectClosest(int maxRays, const RayQueue *rayQueue,
 }
 
 void CPUAggregate::IntersectShadow(int maxRays, ShadowRayQueue *shadowRayQueue,
+                                   LightGrid *lightGird,
                                    SOA<PixelSampleState> *pixelSampleState) const {
     // Intersect shadow rays from _shadowRayQueue_ in parallel
     ParallelFor(0, shadowRayQueue->Size(), [=](int index) {
@@ -64,6 +65,7 @@ void CPUAggregate::IntersectShadow(int maxRays, ShadowRayQueue *shadowRayQueue,
 }
 
 void CPUAggregate::IntersectShadowTr(int maxRays, ShadowRayQueue *shadowRayQueue,
+                                     LightGrid *LightGrid,
                                      SOA<PixelSampleState> *pixelSampleState) const {
     ParallelFor(0, shadowRayQueue->Size(), [=](int index) {
         const ShadowRayWorkItem w = (*shadowRayQueue)[index];
