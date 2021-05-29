@@ -320,7 +320,7 @@ void WavefrontPathIntegrator::SampleMediumScattering(int wavefrontDepth) {
                     Ray ray(w.p, ls->pLight.p() - w.p, w.time, w.medium);
 
                     // Enqueue shadow ray
-                    pstd::optional<LightBounds> lightBounds = lights.Bounds();
+                    pstd::optional<LightBounds> lightBounds = light.Bounds();
                     const Point3f lightCenter =
                         lightBounds ? lightBounds->bounds.Center() : Point3f(0, 0, 0);
                     const int hasCenter = lightBounds.has_value();

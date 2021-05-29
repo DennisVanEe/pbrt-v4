@@ -312,7 +312,7 @@ void WavefrontPathIntegrator::EvaluateMaterialAndBSDF(MaterialEvalQueue *evalQue
                     ray.medium = Dot(ray.d, w.n) > 0 ? w.mediumInterface.outside
                                                      : w.mediumInterface.inside;
 
-                pstd::optional<LightBounds> lightBounds = lights.Bounds();
+                pstd::optional<LightBounds> lightBounds = light.Bounds();
                 const Point3f lightCenter =
                     lightBounds ? lightBounds->bounds.Center() : Point3f(0, 0, 0);
                 const int hasCenter = lightBounds.has_value();

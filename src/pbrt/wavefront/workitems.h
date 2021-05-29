@@ -179,7 +179,8 @@ using HitAreaLightQueue = WorkQueue<HitAreaLightWorkItem>;
 // ShadowRayWorkItem Definition
 struct ShadowRayWorkItem {
     Ray ray;
-    int hasCenter;
+    int hasCenter;  // 1 if the light has a center, and 0 if it doesn't (might want a
+                    // better approach)
     Point3f lightCenter;
     Float tMax;
     SampledWavelengths lambda;

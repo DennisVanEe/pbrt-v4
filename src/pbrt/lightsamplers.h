@@ -16,7 +16,6 @@
 #include <pbrt/util/sampling.h>
 #include <pbrt/util/vecmath.h>
 
-#include <array>
 #include <cstdint>
 #include <string>
 #include <tuple>
@@ -29,19 +28,6 @@ struct LightHash {
     size_t operator()(Light light) const { return Hash(light.ptr()); }
 };
 
-// A scramble function:
-// fn scramble_f32(f: f32, scramble: u32) -> f32 {
-//     // Map to [1, 2)
-//     let f = f + 1.0;
-//     // Scramble mantissa (just xor it)
-//     let i = f.to_bits() ^ (scramble >> 9);
-//     // Map to [0, 1)
-//     f32::from_bits(i) - 1.0
-// }
-
-// This is probably not the best place to put this thing (this will really impact the
-// properties of the scene, but whatever)
-// This stores the light grid.
 class LightGrid {
   public:
     LightGrid(int numLights, Bounds3f worldBounds, int resolution, Allocator alloc)
@@ -64,6 +50,9 @@ class LightGrid {
     PBRT_CPU_GPU
     pstd::optional<SampledLight> SampleLight(Point3f org, pstd::span<const Light> lights,
                                              Float u) const {
+        constexpr uint32_t SCRAMBLES[4] = {0x51633e2d, 0x68bc21eb, 0x02e5be93,
+                                           0x967a889b};
+
         if (lights.empty()) {
             return {};
         }
@@ -77,14 +66,14 @@ class LightGrid {
         const GridEntry &gridIdx = grid[CalcBaseGridIndex(org)];
 
         // Now, we have to sample 4 "random" lights:
-        std::array<int, 4> chosenLights;
+        int chosenLights[4];
         for (int i = 0; i < 4; ++i) {
             chosenLights[i] = UniformSampleLight(ScrambleFloat(u, SCRAMBLES[i]));
         }
 
         // Now, we need to pick each light based on which quadrant they're in:
         Float totalPdf = 0;
-        std::array<Float, 4> lightPdfs;
+        Float lightPdfs[4];
         for (int i = 0; i < 4; ++i) {
             const pstd::optional<LightBounds> bound = lights[chosenLights[i]].Bounds();
             lightPdfs[i] = bound ? gridIdx.getProb(bound->bounds.Center() - org) : 1;
@@ -130,12 +119,9 @@ class LightGrid {
     }
 
   private:
-    static constexpr int PROB_THRESHOLD = 12;
-    static constexpr std::array<uint32_t, 4> SCRAMBLES = {0x51633e2d, 0x68bc21eb,
-                                                          0x02e5be93, 0x967a889b};
-
     struct GridEntry {
-        std::array<int, 16> dir;
+        static constexpr int PROB_THRESHOLD = 12;
+        int dir[16];
 
         GridEntry() : dir{} {}
 
