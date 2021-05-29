@@ -76,7 +76,8 @@ soa HitAreaLightWorkItem {
 
 soa ShadowRayWorkItem {
     Ray ray;
-    int lightId;
+    int hasCenter;
+    Point3f lightCenter;
     Float tMax;
     SampledWavelengths lambda;
     SampledSpectrum Ld, uniPathPDF, lightPathPDF;

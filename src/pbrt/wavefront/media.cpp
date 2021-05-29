@@ -320,9 +320,13 @@ void WavefrontPathIntegrator::SampleMediumScattering(int wavefrontDepth) {
                     Ray ray(w.p, ls->pLight.p() - w.p, w.time, w.medium);
 
                     // Enqueue shadow ray
+                    pstd::optional<LightBounds> lightBounds = lights.Bounds();
+                    const Point3f lightCenter =
+                        lightBounds ? lightBounds->bounds.Center() : Point3f(0, 0, 0);
+                    const int hasCenter = lightBounds.has_value();
                     shadowRayQueue->Push(ShadowRayWorkItem{
-                        ray, light.LightID(), 1 - ShadowEpsilon, w.lambda, Ld, uniPathPDF,
-                        lightPathPDF, w.pixelIndex});
+                        ray, hasCenter, lightCenter, 1 - ShadowEpsilon, w.lambda, Ld,
+                        uniPathPDF, lightPathPDF, w.pixelIndex});
 
                     PBRT_DBG("Enqueued medium shadow ray depth %d "
                              "Ld %f %f %f %f uniPathPDF %f %f %f %f "

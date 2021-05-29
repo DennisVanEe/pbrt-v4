@@ -1307,6 +1307,9 @@ class Bounds3 {
     Vector3<T> Diagonal() const { return pMax - pMin; }
 
     PBRT_CPU_GPU
+    Point3<T> Center() const { return pMin + (Diagonal() * 0.5f); }
+
+    PBRT_CPU_GPU
     T SurfaceArea() const {
         Vector3<T> d = Diagonal();
         return 2 * (d.x * d.y + d.x * d.z + d.y * d.z);

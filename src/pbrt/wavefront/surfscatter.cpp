@@ -312,9 +312,13 @@ void WavefrontPathIntegrator::EvaluateMaterialAndBSDF(MaterialEvalQueue *evalQue
                     ray.medium = Dot(ray.d, w.n) > 0 ? w.mediumInterface.outside
                                                      : w.mediumInterface.inside;
 
-                shadowRayQueue->Push(
-                    ShadowRayWorkItem{ray, light.LightID(), 1 - ShadowEpsilon, lambda, Ld,
-                                      uniPathPDF, lightPathPDF, w.pixelIndex});
+                pstd::optional<LightBounds> lightBounds = lights.Bounds();
+                const Point3f lightCenter =
+                    lightBounds ? lightBounds->bounds.Center() : Point3f(0, 0, 0);
+                const int hasCenter = lightBounds.has_value();
+                shadowRayQueue->Push(ShadowRayWorkItem{
+                    ray, hasCenter, lightCenter, 1 - ShadowEpsilon, lambda, Ld,
+                    uniPathPDF, lightPathPDF, w.pixelIndex});
 
                 PBRT_DBG(
                     "w.index %d spawned shadow ray depth %d Ld %f %f %f %f "

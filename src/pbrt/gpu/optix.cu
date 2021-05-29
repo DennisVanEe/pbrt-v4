@@ -59,7 +59,7 @@ static __forceinline__ __device__ T *getPayload() {
 
 template <typename... Args>
 __device__ inline void Trace(OptixTraversableHandle traversable, Ray ray, Float tMin,
-                             Float tMax, OptixRayFlags flags, Args &&... payload) {
+                             Float tMax, OptixRayFlags flags, Args &&...payload) {
     optixTrace(traversable, make_float3(ray.o.x, ray.o.y, ray.o.z),
                make_float3(ray.d.x, ray.d.y, ray.d.z), tMin, tMax, ray.time,
                OptixVisibilityMask(255), flags, 0, /* ray type */
@@ -107,7 +107,7 @@ extern "C" __global__ void __raygen__findClosest() {
     uint32_t p0 = packPointer0(&ctx), p1 = packPointer1(&ctx);
 
     PBRT_DBG("ray o %f %f %f dir %f %f %f tmax %f\n", ray.o.x, ray.o.y, ray.o.z, ray.d.x,
-        ray.d.y, ray.d.z, tMax);
+             ray.d.y, ray.d.z, tMax);
 
     uint32_t missed = 0;
     Trace(params.traversable, ray, 0.f /* tMin */, tMax, OPTIX_RAY_FLAG_NONE, p0, p1,
@@ -142,9 +142,9 @@ static __forceinline__ __device__ void ProcessClosestIntersection(
     // regular closest hit rays.
     RayWorkItem r = (*params.rayQueue)[rayIndex];
 
-    EnqueueWorkAfterIntersection(r, rayMedium, optixGetRayTmax(), intr, params.mediumSampleQueue,
-                                 params.nextRayQueue, params.hitAreaLightQueue,
-                                 params.basicEvalMaterialQueue,
+    EnqueueWorkAfterIntersection(r, rayMedium, optixGetRayTmax(), intr,
+                                 params.mediumSampleQueue, params.nextRayQueue,
+                                 params.hitAreaLightQueue, params.basicEvalMaterialQueue,
                                  params.universalEvalMaterialQueue);
 }
 
@@ -170,8 +170,7 @@ static __forceinline__ __device__ Transform getWorldFromInstance() {
 ///////////////////////////////////////////////////////////////////////////
 // Triangles
 
-static __forceinline__ __device__ SurfaceInteraction
-getTriangleIntersection() {
+static __forceinline__ __device__ SurfaceInteraction getTriangleIntersection() {
     const TriangleMeshRecord &rec = *(const TriangleMeshRecord *)optixGetSbtDataPointer();
 
     float b1 = optixGetTriangleBarycentrics().x;
@@ -187,9 +186,8 @@ getTriangleIntersection() {
     wo = worldFromInstance.ApplyInverse(wo);
 
     TriangleIntersection ti{b0, b1, b2, optixGetRayTmax()};
-    SurfaceInteraction intr =
-        Triangle::InteractionFromIntersection(rec.mesh, optixGetPrimitiveIndex(),
-                                              ti, time, wo);
+    SurfaceInteraction intr = Triangle::InteractionFromIntersection(
+        rec.mesh, optixGetPrimitiveIndex(), ti, time, wo);
     return worldFromInstance(intr);
 }
 
@@ -250,17 +248,16 @@ extern "C" __global__ void __raygen__shadow() {
         return;
 
     ShadowRayWorkItem sr = (*params.shadowRayQueue)[index];
-    PBRT_DBG("Tracing shadow ray index %d o %f %f %f d %f %f %f\n",
-             index, sr.ray.o.x, sr.ray.o.y, sr.ray.o.z,
-             sr.ray.d.x, sr.ray.d.y, sr.ray.d.z);
+    PBRT_DBG("Tracing shadow ray index %d o %f %f %f d %f %f %f\n", index, sr.ray.o.x,
+             sr.ray.o.y, sr.ray.o.z, sr.ray.d.x, sr.ray.d.y, sr.ray.d.z);
 
     uint32_t missed = 0;
     Trace(params.traversable, sr.ray, 1e-5f /* tMin */, sr.tMax, OPTIX_RAY_FLAG_NONE,
           missed);
 
     //  If the ray missed, it means it hit the light, so we record it as such:
-    if (params.lightGrid) {
-        params.lightGrid->AddOcclusionSample(sr.ray.o, sr.lightId, missed);
+    if (params.lightGrid && sr.hasCenter) {
+        params.lightGrid->AddOcclusionSample(sr.ray.o, sr.lightCenter - sr.ray.o, missed);
     }
 
     RecordShadowRayIntersection(sr, &params.pixelSampleState, !missed);
@@ -297,8 +294,8 @@ extern "C" __global__ void __raygen__shadow_Tr() {
         [&](Point3f p) -> Ray { return ctx.SpawnRayTo(p); }, &hit);
 
     // Again, if the ray hit something, it didn't hit the light, so we record it as such:
-    if (params.lightGrid) {
-        params.lightGrid->AddOcclusionSample(sr.ray.o, sr.lightId, !hit);
+    if (params.lightGrid && sr.hasCenter) {
+        params.lightGrid->AddOcclusionSample(sr.ray.o, sr.lightCenter - sr.ray.o, !hit);
     }
 }
 
@@ -351,8 +348,7 @@ extern "C" __global__ void __closesthit__quadric() {
     ProcessClosestIntersection(intr);
 }
 
-extern "C" __global__ void __anyhit__shadowQuadric() {
-}
+extern "C" __global__ void __anyhit__shadowQuadric() {}
 
 extern "C" __global__ void __intersection__quadric() {
     QuadricRecord &rec = *((QuadricRecord *)optixGetSbtDataPointer());
@@ -429,8 +425,7 @@ extern "C" __global__ void __closesthit__bilinearPatch() {
     ProcessClosestIntersection(intr);
 }
 
-extern "C" __global__ void __anyhit__shadowBilinearPatch() {
-}
+extern "C" __global__ void __anyhit__shadowBilinearPatch() {}
 
 extern "C" __global__ void __intersection__bilinearPatch() {
     BilinearMeshRecord &rec = *((BilinearMeshRecord *)optixGetSbtDataPointer());
@@ -499,7 +494,7 @@ extern "C" __global__ void __raygen__randomHit() {
     uint32_t ptr0 = packPointer0(&payload), ptr1 = packPointer1(&payload);
 
     PBRT_DBG("Randomhit raygen ray.o %f %f %f ray.d %f %f %f tMax %f\n", ray.o.x, ray.o.y,
-        ray.o.z, ray.d.x, ray.d.y, ray.d.z, tMax);
+             ray.o.z, ray.d.x, ray.d.y, ray.d.z, tMax);
 
     while (true) {
         Trace(params.traversable, ray, 0.f /* tMin */, 1.f /* tMax */,
@@ -516,7 +511,7 @@ extern "C" __global__ void __raygen__randomHit() {
         payload.wrs.WeightSum() > 0) {  // TODO: latter check shouldn't be needed...
         const SubsurfaceInteraction &si = payload.wrs.GetSample();
         PBRT_DBG("optix si p %f %f %f n %f %f %f\n", si.p().x, si.p().y, si.p().z, si.n.x,
-            si.n.y, si.n.z);
+                 si.n.y, si.n.z);
 
         params.subsurfaceScatterQueue->reservoirPDF[index] = payload.wrs.SamplePDF();
         params.subsurfaceScatterQueue->ssi[index] = payload.wrs.GetSample();
@@ -530,7 +525,7 @@ extern "C" __global__ void __closesthit__randomHitTriangle() {
     RandomHitPayload *p = getPayload<RandomHitPayload>();
 
     PBRT_DBG("Anyhit triangle for random hit: rec.material %p params.materials %p\n",
-        rec.material.ptr(), p->material.ptr());
+             rec.material.ptr(), p->material.ptr());
 
     SurfaceInteraction intr = getTriangleIntersection();
     p->intr = intr;
@@ -545,10 +540,9 @@ extern "C" __global__ void __closesthit__randomHitBilinearPatch() {
     RandomHitPayload *p = getPayload<RandomHitPayload>();
 
     PBRT_DBG("Anyhit blp for random hit: rec.material %p params.materials %p\n",
-        rec.material.ptr(), p->material.ptr());
+             rec.material.ptr(), p->material.ptr());
 
-    Point2f uv(BitsToFloat(optixGetAttribute_0()),
-               BitsToFloat(optixGetAttribute_1()));
+    Point2f uv(BitsToFloat(optixGetAttribute_0()), BitsToFloat(optixGetAttribute_1()));
     SurfaceInteraction intr = getBilinearPatchIntersection(uv);
     p->intr = intr;
 
@@ -562,12 +556,12 @@ extern "C" __global__ void __closesthit__randomHitQuadric() {
     RandomHitPayload *p = getPayload<RandomHitPayload>();
 
     PBRT_DBG("Anyhit quadric for random hit: rec.material %p params.materials %p\n",
-        rec.material.ptr(), p->material.ptr());
+             rec.material.ptr(), p->material.ptr());
 
     QuadricIntersection qi;
-    qi.pObj = Point3f(BitsToFloat(optixGetAttribute_0()),
-                      BitsToFloat(optixGetAttribute_1()),
-                      BitsToFloat(optixGetAttribute_2()));
+    qi.pObj =
+        Point3f(BitsToFloat(optixGetAttribute_0()), BitsToFloat(optixGetAttribute_1()),
+                BitsToFloat(optixGetAttribute_2()));
     qi.phi = BitsToFloat(optixGetAttribute_3());
 
     SurfaceInteraction intr = getQuadricIntersection(qi);

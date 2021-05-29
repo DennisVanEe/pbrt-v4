@@ -205,8 +205,8 @@ void WavefrontPathIntegrator::SampleSubsurface(int wavefrontDepth) {
                                                         : w.mediumInterface.inside;
 
                 shadowRayQueue->Push(
-                    ShadowRayWorkItem{ray, light.LightID(), 1 - ShadowEpsilon, lambda, Ld,
-                                      uniPathPDF, lightPathPDF, w.pixelIndex});
+                    ShadowRayWorkItem{ray, light.Bounds()->, 1 - ShadowEpsilon, lambda,
+                                      Ld, uniPathPDF, lightPathPDF, w.pixelIndex});
             }
         });
 
