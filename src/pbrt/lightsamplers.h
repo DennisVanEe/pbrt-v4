@@ -190,7 +190,7 @@ class LightGridSampler {
 
     // For these cases, we can't do anything better, so we won't really bother:
     PBRT_CPU_GPU
-    Float PDF(Light light) const { grid->PDF(); }
+    Float PDF(Light light) const { return grid->PDF(); }
 
     std::string ToString() const { return "LightGridSampler"; }
 
