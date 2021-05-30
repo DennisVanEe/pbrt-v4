@@ -1304,6 +1304,11 @@ class Bounds3 {
     }
 
     PBRT_CPU_GPU
+    Point3<T> Center() const {
+        return pMin + (Diagonal() / 2);
+    }
+
+    PBRT_CPU_GPU
     Vector3<T> Diagonal() const { return pMax - pMin; }
 
     PBRT_CPU_GPU

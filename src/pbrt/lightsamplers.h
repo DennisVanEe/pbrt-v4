@@ -19,6 +19,9 @@
 #include <cstdint>
 #include <string>
 #include <tuple>
+#include <vector>
+#include <random>
+#include <algorithm>
 
 namespace pbrt {
 
@@ -33,14 +36,106 @@ struct LightHash {
 // This stores the light grid.
 class LightGrid {
   public:
-    LightGrid(int numLights, Bounds3f worldBounds, int resolution, Allocator alloc)
-        : numLights(numLights),
+    LightGrid(pstd::span<const Light> lights, int nClusters, Bounds3f worldBounds, int resolution, Allocator alloc)
+        : numLights(lights.size()),
+          numClusters(std::min<int>(lights.size(), nClusters)),
           worldMin(worldBounds.pMin),
           resolution(resolution),
-          grid(numLights * resolution * resolution * resolution, alloc) {
+          grid(numLights * resolution * resolution * resolution, alloc),
+          clusters(alloc),
+          lightIds(alloc) {
+
         worldDiagInv =
             Vector3f(1 / worldBounds.Diagonal().x, 1 / worldBounds.Diagonal().y,
                      1 / worldBounds.Diagonal().z);
+
+        // We need to cluster the lights, we'll use kmeans for this (something else might be better, but whatever):
+        // We'll use a standard vector here as this will only run on the CPU:
+        struct lightClusterPair {
+            Point3f center;
+            int lightId;
+            int cluster;
+        };
+
+        // Set the lights here:
+        std::vector<int> nonBoundedLights;
+        std::vector<lightClusterPair> lightClusterPairs;
+        lightClusterPairs.reserve(lights.size());
+        for (int i = 0; i <lights.size(); ++i) {
+            pstd::optional<LightBounds> bounds = lights[i].Bounds();
+            if (!bounds) {
+                nonBoundedLights.push_back(i);
+            } else {
+                lightClusterPairs.push_back(lightClusterPair{bounds->bounds.Center(), i, -1});
+            }
+        }
+
+        // In case we removed lights because they were not bounded:
+        numClusters = std::min<int>(lightClusterPairs.size(), numClusters);
+
+        // Initialize the centers:
+        std::vector<Point3f> centers;
+        {
+            std::vector<lightClusterPair> selectedLights;
+            std::sample(lightClusterPairs.begin(), lightClusterPairs.end(), std::back_inserter(selectedLights), numClusters, std::mt19937{std::random_device{}()});
+
+            for (const lightClusterPair& pair : selectedLights) {
+                centers.push_back(pair.center);
+            }
+        }
+
+        // Used to calculate the cluster means:
+        struct ClusterMean {
+            Point3f sum;
+            int count;
+        };
+        std::vector<ClusterMean> clusterMeans(numClusters);
+
+        constexpr int MAX_NUM_ITERATIONS = 1024;
+        for (int i = 0; i < MAX_NUM_ITERATIONS; ++i) {
+
+            std::fill(clusterMeans.begin(), clusterMeans.end(), ClusterMean{});
+
+            // Assign the lights to each of the clusters:
+            bool clusterChange = false;
+            for (lightClusterPair& pair : lightClusterPairs) {
+                Float minDist = std::numeric_limits<Float>::max();
+                int minCluster = -1;
+
+                for (int cluster = 0; cluster < numClusters; ++cluster) {
+                    const Float dist = DistanceSquared(centers[cluster], pair.center);
+                    if (dist < minDist) {
+                        minCluster = cluster;
+                        minDist = dist;
+                    }
+                }
+
+                if (pair.cluster != minCluster) {
+                    clusterChange = true;
+                }
+
+                pair.cluster = minCluster;
+                clusterMeans[pair.cluster].sum += pair.center;
+                clusterMeans[pair.cluster].count++;
+            }
+
+            // If there were no changes, we are done:
+            if (!clusterChange) {
+                break;
+            }
+
+            // Otherwise, we update the centers and we go again:
+            for (int i = 0; i < numClusters; ++i) {
+                centers[i] = clusterMeans[i].sum / clusterMeans[i].count;
+            }
+        }
+
+        // Fill out the cluster information:
+        int totalOffset = 0;
+        for (const ClusterMean& mean : clusterMeans) {
+            clusters.push_back(ClusterEntry{totalOffset, mean.count});
+            totalOffset += mean.count;
+        }
     }
 
     PBRT_CPU_GPU
@@ -157,12 +252,20 @@ class LightGrid {
         }
     };
 
+    struct ClusterEntry {
+        int index;
+        int count;
+    };
+
     // This stores 2 values, the number of hits, and the number of misses:
     pstd::vector<LightEntry> grid;
+    pstd::vector<ClusterEntry> clusters; // Specifies the different clusters
+    pstd::vector<int> lightIds; // Specifies the different lights
     Vector3f worldDiagInv;
     Point3f worldMin;
     int resolution;
     int numLights;
+    int numClusters;
 };
 
 // Grid based light sampler. The one problem is that we need to maintain a grid, and we
