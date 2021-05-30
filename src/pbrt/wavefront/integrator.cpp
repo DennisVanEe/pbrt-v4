@@ -262,8 +262,8 @@ WavefrontPathIntegrator::WavefrontPathIntegrator(Allocator alloc, ParsedScene &s
     // If we are using a grid:
     if (lightSamplerName == "grid") {
         lightGrid =
-            alloc.new_object<LightGrid>(allLights.size(), aggregate->Bounds(), 128,
-                                        alloc);  // todo
+            alloc.new_object<LightGrid>(allLights, 16, aggregate->Bounds(), 128,
+                                        alloc);
     }
 
     lightSampler = LightSampler::Create(lightSamplerName, allLights, alloc, lightGrid);

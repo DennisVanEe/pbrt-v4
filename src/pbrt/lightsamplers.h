@@ -37,17 +37,18 @@ struct LightHash {
 class LightGrid {
   public:
     LightGrid(pstd::span<const Light> lights, int nClusters, Bounds3f worldBounds, int resolution, Allocator alloc)
-        : numLights(lights.size()),
-          numClusters(std::min<int>(lights.size(), nClusters)),
+        : worldDiagInv(1 / worldBounds.Diagonal().x, 1 / worldBounds.Diagonal().y,
+                     1 / worldBounds.Diagonal().z),
           worldMin(worldBounds.pMin),
           resolution(resolution),
-          grid(numLights * resolution * resolution * resolution, alloc),
+          grid(alloc),
           clusters(alloc),
-          lightIds(alloc) {
+          lightIds(alloc),
+          clusterIds(alloc) {
 
-        worldDiagInv =
-            Vector3f(1 / worldBounds.Diagonal().x, 1 / worldBounds.Diagonal().y,
-                     1 / worldBounds.Diagonal().z);
+        // The number of cluters will be at most nClusters + 1 (where the +1 is for any non-bounded lights, these get a separate cluster).
+        // Note that if therere are fewer than nCluster number of lights, then fewer clusters will be used.
+        int numClusters = std::min<int>(lights.size(), nClusters);
 
         // We need to cluster the lights, we'll use kmeans for this (something else might be better, but whatever):
         // We'll use a standard vector here as this will only run on the CPU:
@@ -99,9 +100,9 @@ class LightGrid {
             // Assign the lights to each of the clusters:
             bool clusterChange = false;
             for (lightClusterPair& pair : lightClusterPairs) {
+
                 Float minDist = std::numeric_limits<Float>::max();
                 int minCluster = -1;
-
                 for (int cluster = 0; cluster < numClusters; ++cluster) {
                     const Float dist = DistanceSquared(centers[cluster], pair.center);
                     if (dist < minDist) {
@@ -136,11 +137,40 @@ class LightGrid {
             clusters.push_back(ClusterEntry{totalOffset, mean.count});
             totalOffset += mean.count;
         }
+        // Don't forget to add these lights as well:
+        if (!nonBoundedLights.empty()) {
+            clusters.push_back(ClusterEntry{totalOffset, static_cast<int>(nonBoundedLights.size())});
+        }
+
+        //
+        // Now we set the value of lightIds and clusterIds:
+        lightIds.resize(lights.size());
+        clusterIds.resize(lights.size());
+
+        std::vector<int> clusterCounters(clusters.size());
+        for (const lightClusterPair& pair : lightClusterPairs) {
+            int& count = clusterCounters[pair.cluster];
+            const ClusterEntry& entry = clusters[pair.cluster];
+
+            lightIds[entry.index + (count++)] = pair.lightId;
+            clusterIds[pair.lightId] = pair.cluster;
+        }
+
+        // Also, add the light cluster for the non-bounded light:
+        for (int i = 0; i < nonBoundedLights.size(); ++i) {
+            const ClusterEntry& entry = clusters.back();
+            lightIds[entry.index + i] = nonBoundedLights[i];
+            clusterIds[nonBoundedLights[i]] = clusters.size() - 1;
+        }
+
+        // Now that we know how many clusters there are, we can allocate the grid:
+        grid.resize(clusters.size() * resolution * resolution * resolution);
     }
 
     PBRT_CPU_GPU
     void AddOcclusionSample(Point3f org, int lightId, bool hit) {
-        const int gridIdx = CalcBaseGridIndex(org) * numLights + lightId;
+        const int clusterId = clusterIds[lightId];
+        const int gridIdx = CalcBaseGridIndex(org) * clusters.size() + clusterId;
 #ifdef PBRT_GPU_CODE
         atomicAdd(&grid[gridIdx].totalCnt, 1);
         atomicAdd(&grid[gridIdx].hitCnt, static_cast<int>(hit));
@@ -153,46 +183,56 @@ class LightGrid {
     PBRT_CPU_GPU
     pstd::optional<SampledLight> SampleLight(Point3f org, pstd::span<const Light> lights,
                                              Float u) const {
-        // This is probably not very effective, but we can try it and see what happens:
-        const int gridIdx = CalcBaseGridIndex(org) * numLights;
 
-        // There is probably a better way, but let's do this for now and try to optimize
-        // it later:
+        const int gridIdx = CalcBaseGridIndex(org) * clusters.size();
+
+        // First, we need to get the totalCdf so that we can normalize it:
         Float totalCdf = 0;
-        for (int i = 0; i < numLights; ++i) {
-            totalCdf += grid[gridIdx + i].getProb();
+        for (int clusterId = 0; clusterId < clusters.size(); ++clusterId) {
+            totalCdf += grid[gridIdx + clusterId].getProb() * clusters[clusterId].count / lightIds.size();
         }
 
+        // If the total CDF is very small, just sample any light:
         if (totalCdf < 0.001) {
             return Sample(u, lights);
         }
 
         const Float invTotalCdf = 1 / totalCdf;
 
+        // Now, we can actually pick a light:
         Float currCdf = 0;
-        for (int i = 0; i < numLights; ++i) {
-            const Float pdf = grid[gridIdx + i].getProb() * invTotalCdf;
-            currCdf += pdf;
+        for (int clusterId = 0; clusterId < clusters.size(); ++clusterId) {
+            const ClusterEntry &cluster = clusters[clusterId];
 
-            if (currCdf >= u) {
-                return SampledLight{lights[i], pdf};
+            // We want to make sure that we also scale the probability of sampling a cluster by the number of lights in that cluster:
+            const Float pdf = grid[gridIdx + clusterId].getProb() * cluster.count / lightIds.size() * invTotalCdf;
+
+            if ((currCdf + pdf) >= u) {
+                // We need to transform u so that it's range is [0, 1)
+                // Otherwise we will introduce bias:
+                const Float newU = (u - currCdf) / pdf;
+
+                int lightIndex = cluster.index + std::min<int>(newU * cluster.count, cluster.count - 1);
+                return SampledLight{lights[lightIds[lightIndex]], pdf * (1.f / cluster.count)};
             }
+
+            currCdf += pdf;
         }
 
-        // This shouldn't happen, but if it does, then we just go here
+        // This shouldn't happen, but if it does, we just sample some random number then:
         return Sample(u, lights);
     }
 
     PBRT_CPU_GPU
     Float PDF(Point3f org, int lightId) const {
         // This is probably not very effective, but we can try it and see what happens:
-        const int gridIdx = CalcBaseGridIndex(org) * numLights;
+        const int gridIdx = CalcBaseGridIndex(org) * clusters.size();
 
         // There is probably a better way, but let's do this for now and try to optimize
         // it later:
         Float totalCdf = 0;
-        for (int i = 0; i < numLights; ++i) {
-            totalCdf += grid[gridIdx + i].getProb();
+        for (int clusterId = 0; clusterId < clusters.size(); ++clusterId) {
+            totalCdf += grid[gridIdx + clusterId].getProb() * clusters[clusterId].count / lightIds.size();
         }
 
         if (totalCdf < 0.001) {
@@ -201,7 +241,9 @@ class LightGrid {
 
         const Float invTotalCdf = 1 / totalCdf;
 
-        return grid[gridIdx + lightId].getProb() * invTotalCdf;
+        // Note that we don't have to do the full fledged pdf calculation here because the entry.count values cancel out:
+        const int clusterId = clusterIds[lightId];
+        return grid[gridIdx + clusterId].getProb() * lightIds.size() * invTotalCdf;
     }
 
     PBRT_CPU_GPU
@@ -228,19 +270,19 @@ class LightGrid {
     // For these cases, we can't do anything better, so we won't really bother:
     PBRT_CPU_GPU
     Float PDF() const {
-        if (numLights == 0)
+        if (lightIds.empty() == 0)
             return 0;
-        return 1.f / numLights;
+        return 1.f / lightIds.size();
     }
 
   private:
     static constexpr int PROB_THRESHOLD = 12;  // Fine tune this
 
-    struct LightEntry {
+    struct GridEntry {
         int hitCnt;
         int totalCnt;
 
-        LightEntry() : hitCnt(0), totalCnt(0) {}
+        GridEntry() : hitCnt(0), totalCnt(0) {}
 
         PBRT_CPU_GPU
         Float getProb() const {
@@ -257,15 +299,15 @@ class LightGrid {
         int count;
     };
 
-    // This stores 2 values, the number of hits, and the number of misses:
-    pstd::vector<LightEntry> grid;
-    pstd::vector<ClusterEntry> clusters; // Specifies the different clusters
-    pstd::vector<int> lightIds; // Specifies the different lights
+    pstd::vector<GridEntry> grid;
+
+    pstd::vector<ClusterEntry> clusters; // For each cluster, indexes into lightIds
+    pstd::vector<int> lightIds;          // Stores all of the lightIds based on which cluster they belong to
+    pstd::vector<int> clusterIds;        // Maps a lightId to the clusterId that they belong to (could use uint16_t?)
+
     Vector3f worldDiagInv;
     Point3f worldMin;
     int resolution;
-    int numLights;
-    int numClusters;
 };
 
 // Grid based light sampler. The one problem is that we need to maintain a grid, and we
