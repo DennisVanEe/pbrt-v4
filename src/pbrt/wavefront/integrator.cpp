@@ -255,14 +255,15 @@ WavefrontPathIntegrator::WavefrontPathIntegrator(Allocator alloc, ParsedScene &s
     std::string lightSamplerName = "grid";  //"uniform";
     // scene.integrator.parameters.GetOneString("lightsampler", "bvh");
     if (allLights.size() == 1)
-        lightSamplerName = "grid";
+        lightSamplerName = "uniform";
 
     std::cout << "Light Sampler Chosen: " << lightSamplerName << "\n";
+    std::cout << "Number of lights in Scene: " << allLights.size() << "\n";
 
     // If we are using a grid:
     if (lightSamplerName == "grid") {
         lightGrid =
-            alloc.new_object<LightGrid>(allLights, 16, aggregate->Bounds(), 128,
+            alloc.new_object<LightGrid>(allLights, 32, aggregate->Bounds(), 256,
                                         alloc);
     }
 

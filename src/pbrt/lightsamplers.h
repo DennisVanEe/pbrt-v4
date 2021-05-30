@@ -22,6 +22,7 @@
 #include <vector>
 #include <random>
 #include <algorithm>
+#include <iostream>
 
 namespace pbrt {
 
@@ -142,6 +143,11 @@ class LightGrid {
             clusters.push_back(ClusterEntry{totalOffset, static_cast<int>(nonBoundedLights.size())});
         }
 
+        std::cout << "Version 2\n";
+        for (const ClusterEntry& cluster : clusters) {
+            std::cout << "index: " << cluster.index << ", count: " << cluster.count << "\n";
+        }
+
         //
         // Now we set the value of lightIds and clusterIds:
         lightIds.resize(lights.size());
@@ -243,7 +249,7 @@ class LightGrid {
 
         // Note that we don't have to do the full fledged pdf calculation here because the entry.count values cancel out:
         const int clusterId = clusterIds[lightId];
-        return grid[gridIdx + clusterId].getProb() * lightIds.size() * invTotalCdf;
+        return grid[gridIdx + clusterId].getProb() * clusters[clusterId].count / lightIds.size() * invTotalCdf / clusters[clusterId].count;
     }
 
     PBRT_CPU_GPU
@@ -276,7 +282,7 @@ class LightGrid {
     }
 
   private:
-    static constexpr int PROB_THRESHOLD = 12;  // Fine tune this
+    static constexpr int PROB_THRESHOLD = 16;  // Fine tune this
 
     struct GridEntry {
         int hitCnt;
@@ -289,7 +295,7 @@ class LightGrid {
             if (totalCnt < PROB_THRESHOLD) {
                 return 1;
             } else {
-                return hitCnt / static_cast<Float>(totalCnt);
+                return std::max<Float>(hitCnt / static_cast<Float>(totalCnt), 0.05);
             }
         }
     };
