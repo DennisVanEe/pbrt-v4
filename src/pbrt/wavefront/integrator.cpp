@@ -252,17 +252,18 @@ WavefrontPathIntegrator::WavefrontPathIntegrator(Allocator alloc, ParsedScene &s
     if (!haveLights)
         ErrorExit("No light sources specified");
 
-    std::string lightSamplerName = "grid";  //"uniform";
+    std::string lightSamplerName = "grid";
     // scene.integrator.parameters.GetOneString("lightsampler", "bvh");
     if (allLights.size() == 1)
         lightSamplerName = "grid";
 
     std::cout << "Light Sampler Chosen: " << lightSamplerName << "\n";
+    std::cout << "Number of Lights: " << allLights.size() << "\n";
 
     // If we are using a grid:
     if (lightSamplerName == "grid") {
         lightGrid =
-            alloc.new_object<LightGrid>(allLights.size(), aggregate->Bounds(), 128,
+            alloc.new_object<LightGrid>(allLights, aggregate->Bounds(), 128,
                                         alloc);  // todo
     }
 

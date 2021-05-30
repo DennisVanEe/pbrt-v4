@@ -28,85 +28,104 @@ struct LightHash {
     size_t operator()(Light light) const { return Hash(light.ptr()); }
 };
 
-// This is probably not the best place to put this thing (this will really impact the
-// properties of the scene, but whatever)
-// This stores the light grid.
 class LightGrid {
   public:
-    LightGrid(int numLights, Bounds3f worldBounds, int resolution, Allocator alloc)
-        : numLights(numLights),
-          worldMin(worldBounds.pMin),
+    LightGrid(pstd::span<const Light> lights, Bounds3f worldBounds, int resolution, Allocator alloc)
+        : worldMin(worldBounds.pMin),
           resolution(resolution),
-          grid(numLights * resolution * resolution * resolution, alloc) {
+          grid(alloc),
+          lightCenters(alloc),
+          numLights(lights.size()) {
         worldDiagInv =
             Vector3f(1 / worldBounds.Diagonal().x, 1 / worldBounds.Diagonal().y,
                      1 / worldBounds.Diagonal().z);
+
+        if (lights.size() < 4) {
+            return; // Don't need to allocate memory in this case
+        }
+
+        grid.resize(resolution * resolution * resolution);
+
+        lightCenters.reserve(lights.size());
+        for (const Light& light : lights) {
+            const pstd::optional<LightBounds> bounds = light.Bounds();
+            if (bounds) {
+                lightCenters.push_back(bounds->bounds.Center());
+            } else {
+                // TODO: figure out of this is smart or not...
+                lightCenters.push_back(worldBounds.Center());
+            }
+        }
     }
 
+    // Note, based on how we sample the lights, dir should point to the center of the
+    // light:
     PBRT_CPU_GPU
-    void AddOcclusionSample(Point3f org, int lightId, bool hit) {
-        const int gridIdx = CalcBaseGridIndex(org) * numLights + lightId;
-#ifdef PBRT_GPU_CODE
-        atomicAdd(&grid[gridIdx].totalCnt, 1);
-        atomicAdd(&grid[gridIdx].hitCnt, static_cast<int>(hit));
-#else
-        grid[gridIdx].totalCnt += 1;
-        grid[gridIdx].hitCnt += static_cast<int>(hit);
-#endif
+    void AddOcclusionSample(Point3f org, int lightId, int hit) {
+        if (lightCenters.size() < 4) {
+            return;
+        }
+
+        const Vector3f dir = lightCenters[lightId] - org;
+        grid[CalcBaseGridIndex(org)].addOcclData(dir, hit);
     }
 
     PBRT_CPU_GPU
     pstd::optional<SampledLight> SampleLight(Point3f org, pstd::span<const Light> lights,
                                              Float u) const {
-        // This is probably not very effective, but we can try it and see what happens:
-        const int gridIdx = CalcBaseGridIndex(org) * numLights;
+        constexpr uint32_t SCRAMBLES[4] = {0x51633e2d, 0x68bc21eb, 0x02e5be93,
+                                           0x967a889b};
 
-        // There is probably a better way, but let's do this for now and try to optimize
-        // it later:
-        Float totalCdf = 0;
-        for (int i = 0; i < numLights; ++i) {
-            totalCdf += grid[gridIdx + i].getProb();
+        if (numLights == 0) {
+            return {};
         }
 
-        if (totalCdf < 0.001) {
-            return Sample(u, lights);
+        // If there are less than 4 lights, then we don't bother, just do normal sampling:
+        if (numLights < 4) {
+            return SampledLight{lights[UniformSampleLight(u)], 1.f / numLights};
         }
 
-        const Float invTotalCdf = 1 / totalCdf;
+        // Get the current grid entry:
+        const GridEntry &gridIdx = grid[CalcBaseGridIndex(org)];
+
+        // Now, we have to sample 4 "random" lights:
+        int chosenLights[4];
+        for (int i = 0; i < 4; ++i) {
+            chosenLights[i] = UniformSampleLight(ScrambleFloat(u, SCRAMBLES[i]));
+        }
+
+        // Now, we need to pick each light based on which quadrant they're in:
+        Float totalPdf = 0;
+        Float lightPdfs[4];
+        for (int i = 0; i < 4; ++i) {
+            const Point3f center = lightCenters[chosenLights[i]];
+            lightPdfs[i] = gridIdx.getProb(center - org);
+            totalPdf += lightPdfs[i];
+        }
+        const Float invTotalPdf = 1 / totalPdf;
 
         Float currCdf = 0;
-        for (int i = 0; i < numLights; ++i) {
-            const Float pdf = grid[gridIdx + i].getProb() * invTotalCdf;
+        for (int i = 0; i < 4; ++i) {
+            const Float pdf = lightPdfs[i] * invTotalPdf;
             currCdf += pdf;
-
             if (currCdf >= u) {
-                return SampledLight{lights[i], pdf};
+                return SampledLight{lights[i], pdf * (4.f / numLights)};
             }
         }
 
         // This shouldn't happen, but if it does, then we just go here
-        return Sample(u, lights);
+        return {};
     }
 
     PBRT_CPU_GPU
     Float PDF(Point3f org, int lightId) const {
-        // This is probably not very effective, but we can try it and see what happens:
-        const int gridIdx = CalcBaseGridIndex(org) * numLights;
-
-        // There is probably a better way, but let's do this for now and try to optimize
-        // it later:
-        Float totalCdf = 0;
-        for (int i = 0; i < numLights; ++i) {
-            totalCdf += grid[gridIdx + i].getProb();
+        if (numLights < 4) {
+            return 1.f / numLights;
         }
 
-        if (totalCdf < 0.001) {
-            return PDF();
-        }
-
-        const Float invTotalCdf = 1 / totalCdf;
-
-        return grid[gridIdx + lightId].getProb() * invTotalCdf;
+        const Vector3f dir = lightCenters[lightId] - org;
+        const Float pdf = grid[CalcBaseGridIndex(org)].getProb(dir);
+        return pdf * (4.f / numLights);
     }
 
     PBRT_CPU_GPU
@@ -121,44 +140,68 @@ class LightGrid {
         return xoffset + resolution * (yoffset + resolution * zoffset);
     }
 
-    // For these cases, we can't do anything better, so we won't really bother:
+    // Picks a random light:
     PBRT_CPU_GPU
-    pstd::optional<SampledLight> Sample(Float u, pstd::span<const Light> lights) const {
-        if (lights.empty())
-            return {};
-        int lightIndex = std::min<int>(u * lights.size(), lights.size() - 1);
-        return SampledLight{lights[lightIndex], 1.f / lights.size()};
-    }
-
-    // For these cases, we can't do anything better, so we won't really bother:
-    PBRT_CPU_GPU
-    Float PDF() const {
-        if (numLights == 0)
-            return 0;
-        return 1.f / numLights;
+    int UniformSampleLight(Float u) const {
+        return std::min<int>(u * numLights, numLights - 1);
     }
 
   private:
-    static constexpr int PROB_THRESHOLD = 12;  // Fine tune this
+    struct GridEntry {
+        static constexpr int PROB_THRESHOLD = 12;
+        int dir[16];
 
-    struct LightEntry {
-        int hitCnt;
-        int totalCnt;
-
-        LightEntry() : hitCnt(0), totalCnt(0) {}
+        GridEntry() : dir{} {}
 
         PBRT_CPU_GPU
-        Float getProb() const {
-            if (totalCnt < PROB_THRESHOLD) {
+        Float getProb(Vector3f dir) const {
+            const int idx = dirToIndex(dir) * 2;
+            if (dir[idx] < PROB_THRESHOLD) {
                 return 1;
-            } else {
-                return hitCnt / static_cast<Float>(totalCnt);
             }
+            return dir[idx] / static_cast<Float>(dir[idx + 1]);
+        }
+
+        PBRT_CPU_GPU
+        Float addOcclData(Vector3f dir, int hit) {
+            const int idx = dirToIndex(dir) * 2;
+#ifdef PBRT_GPU_CODE
+            atomicAdd(&dir[idx + 0], 1);
+            atomicAdd(&dir[idx + 1], hit);
+#else
+            dir[idx + 0] += 1;
+            dir[idx + 1] += hit;
+#endif
+        }
+
+        // Given a direction, converts it to an index:
+        PBRT_CPU_GPU
+        static int dirToIndex(Vector3f dir) {
+            // facex: (1 if it faces, 0 if not):
+            const int facex = dir.x > 0;  // Dot(dir, Vector3f(1, 0, 0)) > 0;
+            const int facey = dir.y > 0;  // Dot(dir, Vector3f(0, 1, 0)) > 0;
+            const int facez = dir.z > 0;  // Dot(dir, Vector3f(0, 0, 1)) > 0;
+            return facex | (facey << 1) | (facez << 2);
         }
     };
 
+    PBRT_CPU_GPU
+    static Float ScrambleFloat(Float f, uint32_t scramble) {
+        static_assert(sizeof(Float) == sizeof(float),
+                      "This only works for single precision right now...");
+
+        union {
+            float f;
+            uint32_t i;
+        } bits;
+        bits.f = f + 1;
+        bits.i = bits.i ^ (scramble >> 9);
+        return bits.f - 1;
+    }
+
     // This stores 2 values, the number of hits, and the number of misses:
-    pstd::vector<LightEntry> grid;
+    pstd::vector<GridEntry> grid;
+    pstd::vector<Point3f> lightCenters;
     Vector3f worldDiagInv;
     Point3f worldMin;
     int resolution;
@@ -184,13 +227,20 @@ class LightGridSampler {
         return grid->PDF(ctx.p(), light.LightID());
     }
 
-    // For these cases, we can't do anything better, so we won't really bother:
     PBRT_CPU_GPU
-    pstd::optional<SampledLight> Sample(Float u) const { return grid->Sample(u, lights); }
+    pstd::optional<SampledLight> Sample(Float u) const {
+        if (lights.empty())
+            return {};
+        int lightIndex = std::min<int>(u * lights.size(), lights.size() - 1);
+        return SampledLight{lights[lightIndex], 1.f / lights.size()};
+    }
 
-    // For these cases, we can't do anything better, so we won't really bother:
     PBRT_CPU_GPU
-    Float PDF(Light light) const { return grid->PDF(); }
+    Float PDF(Light light) const {
+        if (lights.empty())
+            return 0;
+        return 1.f / lights.size();
+    }
 
     std::string ToString() const { return "LightGridSampler"; }
 
