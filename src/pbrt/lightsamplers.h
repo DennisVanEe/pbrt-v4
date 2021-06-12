@@ -41,7 +41,9 @@ class LightGrid {
         : worldDiagInv(1 / worldBounds.Diagonal().x, 1 / worldBounds.Diagonal().y,
                      1 / worldBounds.Diagonal().z),
           worldMin(worldBounds.pMin),
-          resolution(resolution),
+          x_resolution(worldBounds.Diagonal().x/std::cbrt((worldBounds.Diagonal().x*worldBounds.Diagonal().y*worldBounds.Diagonal().z)/(((nClusters > lights.size()) ? nClusters/lights.size() : 1)*resolution*resolution*resolution))),
+          y_resolution(worldBounds.Diagonal().y/std::cbrt((worldBounds.Diagonal().x*worldBounds.Diagonal().y*worldBounds.Diagonal().z)/(((nClusters > lights.size()) ? nClusters/lights.size() : 1)*resolution*resolution*resolution))),
+          z_resolution(worldBounds.Diagonal().z/std::cbrt((worldBounds.Diagonal().x*worldBounds.Diagonal().y*worldBounds.Diagonal().z)/(((nClusters > lights.size()) ? nClusters/lights.size() : 1)*resolution*resolution*resolution))),
           grid(alloc),
           clusters(alloc),
           lightIds(alloc),
@@ -170,7 +172,7 @@ class LightGrid {
         }
 
         // Now that we know how many clusters there are, we can allocate the grid:
-        grid.resize(clusters.size() * resolution * resolution * resolution);
+        grid.resize(clusters.size() * x_resolution * y_resolution * z_resolution);
     }
 
     PBRT_CPU_GPU
@@ -252,16 +254,17 @@ class LightGrid {
         return grid[gridIdx + clusterId].getProb() * clusters[clusterId].count / lightIds.size() * invTotalCdf / clusters[clusterId].count;
     }
 
+    // Alex Modified
     PBRT_CPU_GPU
     int CalcBaseGridIndex(Point3f org) const {
         const Vector3f offset = org - worldMin;
         const int xoffset =
-            std::min<int>(offset.x * worldDiagInv.x * resolution, resolution - 1);
+            std::min<int>(offset.x * worldDiagInv.x * x_resolution, x_resolution - 1);
         const int yoffset =
-            std::min<int>(offset.y * worldDiagInv.y * resolution, resolution - 1);
+            std::min<int>(offset.y * worldDiagInv.y * y_resolution, y_resolution - 1);
         const int zoffset =
-            std::min<int>(offset.z * worldDiagInv.z * resolution, resolution - 1);
-        return xoffset + resolution * (yoffset + resolution * zoffset);
+            std::min<int>(offset.z * worldDiagInv.z * z_resolution, z_resolution - 1);
+        return xoffset + x_resolution * (yoffset + y_resolution * zoffset);
     }
 
     // For these cases, we can't do anything better, so we won't really bother:
@@ -313,7 +316,11 @@ class LightGrid {
 
     Vector3f worldDiagInv;
     Point3f worldMin;
-    int resolution;
+    // Alex Modified
+    // int resolution;
+    int x_resolution;
+    int y_resolution;
+    int z_resolution;
 };
 
 // Grid based light sampler. The one problem is that we need to maintain a grid, and we
