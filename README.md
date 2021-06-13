@@ -1,6 +1,10 @@
 pbrt, Version 4 (Early Release)
 ===============================
 
+This code base contains modifications made by Dennis van Ee, Alexander Graening, and Xilai Zhang for UCLA CS 259 Spring 2021.
+
+Added a occlusion distribution learning model to improve light sampling on the GPU.
+
 [<img src="https://github.com/mmp/pbrt-v4/workflows/cpu-build-and-test/badge.svg">](https://github.com/mmp/pbrt-v4/actions?query=workflow%3Acpu-build-and-test)
 [<img src="https://github.com/mmp/pbrt-v4/workflows/gpu-build-only/badge.svg">](https://github.com/mmp/pbrt-v4/actions?query=workflow%3Agpu-build-only)
 
